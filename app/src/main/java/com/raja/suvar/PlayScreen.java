@@ -1,5 +1,22 @@
+/*
+ *    Copyright 2015 Azmeer Raja
+ *
+ *      Licensed under the Apache License, Version 2.0 (the "License");
+ *      you may not use this file except in compliance with the License.
+ *      You may obtain a copy of the License at
+ *
+ *          http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *      Unless required by applicable law or agreed to in writing, software
+ *      distributed under the License is distributed on an "AS IS" BASIS,
+ *      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *      See the License for the specific language governing permissions and
+ *      limitations under the License.
+ */
+
 package com.raja.suvar;
 
+import android.content.Context;
 import android.content.res.AssetManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -14,6 +31,11 @@ import android.util.Log;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.View;
+import android.widget.Toast;
+
+import com.google.android.gms.ads.AdListener;
+import com.google.android.gms.ads.AdRequest;
+import com.google.android.gms.ads.InterstitialAd;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -29,19 +51,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Represents the main screen of play for the game.
- *
- * There are many ugly things here, partly because game programming lends itself
- * to questionable style.  ...and partly because this is my first venture into Android.
- *
- * Messy manual object recycling, violation of normal object oriented privacy
- * principles, and everything is extremely imperative/procedural, even for Java.
- * But apparently keeping android
- * happy is more important than data hiding and hands-free garbage collection.
- *
- * Created by ugliest on 12/29/14.
- */
+
 public class PlayScreen extends Screen {
     static final float ZSTRETCH = 240; // lower -> more stretched on z axis
     static final float WALL_Z = 1000; // where is the wall, on the z axis?
@@ -71,6 +81,12 @@ public class PlayScreen extends Screen {
     private Rect scaledDst = new Rect();
     private MainActivity act = null;
     private int selectable_speed;
+    private Context applicationContext;
+    private InterstitialAd mInterstitialAd;
+
+    public Context getApplicationContext() {
+        return applicationContext;
+    }
 
     private enum State {        RUNNING, STARTROUND, ROUNDSUMMARY, STARTGAME, PLAYERDIED, GAMEOVER    }
     private volatile State gamestate = State.STARTGAME;
@@ -483,9 +499,9 @@ public class PlayScreen extends Screen {
             p.setTextSize(act.TS_NORMAL);
             p.setTypeface(act.getGameFont());
             String t = "SCORE: 999999";
-            rhstextoffset = (int)p.measureText(t);
-            p.getTextBounds(t, 0, t.length()-1, scaledDst);
-            statstextheight = (int)(scaledDst.height() +5);
+            rhstextoffset = (int) p.measureText(t);
+            p.getTextBounds(t, 0, t.length() - 1, scaledDst);
+            statstextheight = (int) (scaledDst.height() + 5);
             statstextheight2 = statstextheight * 2;
         }
 
@@ -508,10 +524,10 @@ public class PlayScreen extends Screen {
                 Seed s = seedsQueued.get(0);
                 seedsQueued.remove(0);
 
-                int initx = (int)-s.halfWidth;
+                int initx = (int) -s.halfWidth;
                 int speed = selectable_speed;
                 if (Math.random() > .5) {
-                    initx = (int)(width + s.halfWidth);
+                    initx = (int) (width + s.halfWidth);
                     speed = -speed;
                 }
 
@@ -526,6 +542,10 @@ public class PlayScreen extends Screen {
             if (nWallSplats * 100 / nTotFruit >= minRoundPassPct) {
                 act.playSound(Sound.PASSLEVEL);
                 round++;
+                Toast.makeText(getApplicationContext(), "ad goes", Toast.LENGTH_SHORT).show();
+              //  launchAd();
+               // loadAd();
+
                 gamestate = State.ROUNDSUMMARY;
             } else
                 loseLife();
@@ -626,7 +646,7 @@ public class PlayScreen extends Screen {
                         f.x += f.vx * elapsedsecs;
 
                         // wobble displayable fruit up and down, and return them to regular line when let go
-                        int targy = inity + (int)(Math.sin(f.x/15)* selectable_y_play);
+                        int targy = inity + (int) (Math.sin(f.x / 15) * selectable_y_play);
                         f.y += (targy - f.y) / SELECTABLE_FRUIT_BRAKING_FACTOR;
                     }
                     if (f.x < -f.seed.halfWidth || f.x > width + f.seed.halfWidth) {
@@ -636,6 +656,69 @@ public class PlayScreen extends Screen {
                     }
                 }
             }
+        }
+    }
+
+
+    private void loadAd() {
+        AdRequest adRequest = new AdRequest
+                .Builder()
+                //.addTestDevice(AdRequest.DEVICE_ID_EMULATOR)
+                //.addTestDevice(getResources().getString(R.string.device_id))
+                .build();
+        mInterstitialAd.loadAd(adRequest);
+    }
+
+    private void launchAd() {
+        // Create the InterstitialAd and set the adUnitId.
+        mInterstitialAd = new InterstitialAd(getApplicationContext());
+        // Defined in res/values/strings.xml
+        mInterstitialAd.setAdUnitId(String.valueOf(R.string.interstitial_ad_unit_id));
+
+        mInterstitialAd.setAdListener(new AdListener() {
+            @Override
+            public void onAdLoaded() {
+                super.onAdLoaded();
+                showAd();
+            }
+
+            @Override
+            public void onAdFailedToLoad(int errorCode) {
+                super.onAdFailedToLoad(errorCode);
+                String msg = String.format("onFaildtoLoad (%s)", getErrorReson(errorCode));
+            }
+
+            @Override
+            public void onAdClosed() {
+                super.onAdClosed();
+            }
+        });
+    }
+
+    private String getErrorReson(int errcode) {
+        String errReason = "";
+        switch (errcode) {
+            case AdRequest.ERROR_CODE_INTERNAL_ERROR:
+                errReason = "Internal Error";
+                break;
+            case AdRequest.ERROR_CODE_INVALID_REQUEST:
+                errReason = "invalid request";
+                break;
+            case AdRequest.ERROR_CODE_NETWORK_ERROR:
+                errReason = "Network err";
+                break;
+            case AdRequest.ERROR_CODE_NO_FILL:
+                errReason = "No Fill";
+                break;
+        }
+        return errReason;
+    }
+
+    private void showAd() {
+        if (mInterstitialAd.isLoaded()) {
+            mInterstitialAd.show();
+        } else {
+            // Toast.makeText(this, "Ad did not load", Toast.LENGTH_SHORT).show();
         }
     }
 
